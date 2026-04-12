@@ -23,8 +23,10 @@ opencv-python-headless>=4.10.0
 Pillow>=10.4.0
 
 # Background removal
+# onnxruntime-gpu has no ARM64 PyPI wheel (DGX Spark is aarch64).
+# CPU onnxruntime is sufficient — rembg u2net inference is fast enough on CPU.
 rembg>=2.0.57
-onnxruntime-gpu>=1.18.0
+onnxruntime>=1.18.0
 
 # Super resolution / HD upscaling
 basicsr>=1.4.2
