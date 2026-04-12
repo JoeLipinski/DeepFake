@@ -12,10 +12,7 @@ interface Props {
 }
 
 export function VariantCard({ name, isSelected, onSelect }: Props) {
-  const { jobId, jobResult } = useAppStore((s) => ({
-    jobId: s.jobId,
-    jobResult: s.jobResult,
-  }));
+  const jobId = useAppStore((s) => s.jobId);
 
   const imgUrl = jobId ? buildExportUrl(jobId, name) : null;
 
