@@ -34,7 +34,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_BASE_URL=http://localhost:80
+        # Empty string = relative URLs → nginx proxy handles /api/ routing.
+        # Do NOT set this to http://localhost or a hardcoded IP — the browser
+        # resolves it on the client machine, not the DGX Spark.
+        - VITE_API_BASE_URL=
     restart: unless-stopped
     depends_on:
       backend:

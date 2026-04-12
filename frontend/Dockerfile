@@ -1,7 +1,8 @@
 # Stage 1: Build Vite bundle
 FROM node:20-alpine AS builder
 
-ARG VITE_API_BASE_URL=http://localhost:80
+# Empty default = relative URLs, routed by nginx proxy at runtime.
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 WORKDIR /app
