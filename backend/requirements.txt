@@ -28,9 +28,8 @@ Pillow>=10.4.0
 rembg>=2.0.57
 onnxruntime>=1.18.0
 
-# Super resolution / HD upscaling
-basicsr>=1.4.2
-realesrgan>=0.3.0
+# HD upscaling: PIL Lanczos (basicsr/realesrgan incompatible with modern torchvision)
+# Real-ESRGAN can be re-added once basicsr publishes a torchvision-0.17+ compatible release.
 
 # SVG rasterization
 cairosvg>=2.7.1

@@ -34,7 +34,7 @@ WORKDIR /app
 
 # Install Python deps first (cache layer)
 COPY requirements.txt .
-RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 \
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128 \
     && pip install -r requirements.txt
 
 # Copy application source

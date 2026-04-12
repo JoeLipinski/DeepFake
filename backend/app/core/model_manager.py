@@ -44,9 +44,8 @@ def get_rembg_session() -> Any:
 
 
 def get_realesrgan_model() -> Any:
-    if _realesrgan_model is None:
-        raise RuntimeError("Real-ESRGAN model not loaded.")
-    return _realesrgan_model
+    # Real-ESRGAN not loaded; upscaler.py uses PIL Lanczos instead.
+    raise RuntimeError("Real-ESRGAN is not available. Use PIL Lanczos upscaler.")
 
 
 def load_all_models(depth_model_id: str, realesrgan_model_url: str) -> None:
@@ -58,7 +57,9 @@ def load_all_models(depth_model_id: str, realesrgan_model_url: str) -> None:
 
     _load_depth_model(depth_model_id)
     _load_rembg()
-    _load_realesrgan(realesrgan_model_url)
+    # Real-ESRGAN skipped: basicsr incompatible with torchvision>=0.17.
+    # Upscaling falls back to PIL Lanczos (see pipeline/upscaler.py).
+    _loaded_models.append("upscaler_lanczos")
 
     logger.info("All models loaded: %s", _loaded_models)
 
