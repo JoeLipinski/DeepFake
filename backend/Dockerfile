@@ -1,6 +1,7 @@
-# Base image: CUDA 12.1 + cuDNN + Ubuntu 22.04
-# Matches DGX Spark CUDA toolkit. Use -devel for compilation of basicsr/realesrgan.
-FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
+# Base image: CUDA 12.6 + cuDNN + Ubuntu 22.04
+# Driver 580.142 on DGX Spark supports up to CUDA 13.0; 12.6 is the newest with
+# stable PyTorch cu126 wheels. Use -devel for basicsr/realesrgan compilation.
+FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -31,7 +32,7 @@ WORKDIR /app
 
 # Install Python deps first (cache layer)
 COPY requirements.txt .
-RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121 \
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 \
     && pip install -r requirements.txt
 
 # Copy application source

@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 # Hot-reload for both backend (uvicorn --reload) and frontend (Vite HMR).
 
