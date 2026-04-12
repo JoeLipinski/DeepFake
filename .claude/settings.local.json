@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.toolify.ai)",
+      "WebSearch",
+      "Read(//Users/Joe/Development/Janus/janus-new/src/**)",
+      "Read(//Users/Joe/Development/Janus/janus-new/**)"
+    ]
+  }
+}

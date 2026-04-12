@@ -1,0 +1,50 @@
+# Environment
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
+
+# Model cache & job storage (large)
+backend/jobs/
+backend/.cache/
+*.npy
+*.pth
+*.pt
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Firecrawl
+.firecrawl/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes (data managed by Docker)
+volumes/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
