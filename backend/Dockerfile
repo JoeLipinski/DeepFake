@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf2.0-dev \
     libffi-dev \
     shared-mime-info \
+    libgl1 \
+    libglib2.0-0 \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
