@@ -11,6 +11,7 @@ class JobStep(str, Enum):
     queued = "queued"
     removing_background = "removing_background"
     estimating_depth = "estimating_depth"
+    refining_depth = "refining_depth"
     generating_variants = "generating_variants"
     done = "done"
 

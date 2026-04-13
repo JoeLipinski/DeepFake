@@ -62,11 +62,22 @@ async def run_depth_job(
     # Use luminance-inversion depth for crisp engraving relief.
     use_luminance = (mime_type == "image/svg+xml")
     job_queue.update_job(job_id, step=JobStep.estimating_depth, progress=0.25)
-    from app.pipeline.depth_estimator import estimate_depth
+    from app.pipeline.depth_estimator import estimate_depth, apply_sam_refinement
     raw_depth: np.ndarray = await loop.run_in_executor(
         None, estimate_depth, job_id, image, use_luminance, image_type, use_marigold
     )
-    job_queue.update_job(job_id, progress=0.70)
+    job_queue.update_job(job_id, progress=0.55)
+
+    # --- Step 3b: SAM 2 per-region refinement (illustration mode only) ---
+    # Not applied to SVG (luminance path) — those are already clean flat regions.
+    if image_type == "illustration" and not use_luminance:
+        job_queue.update_job(job_id, step=JobStep.refining_depth, progress=0.60)
+        raw_depth = await loop.run_in_executor(
+            None, lambda: apply_sam_refinement(job_id, raw_depth, image)
+        )
+        job_queue.update_job(job_id, progress=0.70)
+    else:
+        job_queue.update_job(job_id, progress=0.70)
 
     # --- Step 4: Generate style variants ---
     job_queue.update_job(job_id, step=JobStep.generating_variants, progress=0.75)

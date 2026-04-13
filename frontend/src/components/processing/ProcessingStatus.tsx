@@ -4,7 +4,7 @@ import type { JobStep } from "@/types";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STEPS: { key: JobStep; label: string }[] = [
+const STEPS_PHOTO: { key: JobStep; label: string }[] = [
   { key: "queued", label: "Queued" },
   { key: "removing_background", label: "Removing background" },
   { key: "estimating_depth", label: "Estimating depth" },
@@ -12,26 +12,36 @@ const STEPS: { key: JobStep; label: string }[] = [
   { key: "done", label: "Complete" },
 ];
 
-const STEP_ORDER: JobStep[] = STEPS.map((s) => s.key);
+const STEPS_ILLUSTRATION: { key: JobStep; label: string }[] = [
+  { key: "queued", label: "Queued" },
+  { key: "removing_background", label: "Removing background" },
+  { key: "estimating_depth", label: "Estimating depth" },
+  { key: "refining_depth", label: "Refining regions (SAM 2)" },
+  { key: "generating_variants", label: "Generating 4 variants" },
+  { key: "done", label: "Complete" },
+];
 
-function stepIndex(step: JobStep | null) {
+function stepIndex(step: JobStep | null, steps: { key: JobStep }[]) {
   if (!step) return -1;
-  return STEP_ORDER.indexOf(step);
+  return steps.findIndex((s) => s.key === step);
 }
 
 export function ProcessingStatus() {
-  const { jobStatus, jobStep, jobProgress, jobError } = useAppStore(
+  const { jobStatus, jobStep, jobProgress, jobError, imageType } = useAppStore(
     useShallow((s) => ({
       jobStatus: s.jobStatus,
       jobStep: s.jobStep,
       jobProgress: s.jobProgress,
       jobError: s.jobError,
+      imageType: s.imageType,
     }))
   );
 
+  const STEPS = imageType === "illustration" ? STEPS_ILLUSTRATION : STEPS_PHOTO;
+
   if (!jobStatus || jobStatus === "complete") return null;
 
-  const currentIdx = stepIndex(jobStep);
+  const currentIdx = stepIndex(jobStep, STEPS);
 
   return (
     <div className="bg-forge-surface border border-forge-border rounded-xl p-6 space-y-5">
@@ -60,7 +70,7 @@ export function ProcessingStatus() {
       {/* Step list */}
       <div className="space-y-2">
         {STEPS.filter((s) => s.key !== "queued").map((step) => {
-          const idx = stepIndex(step.key);
+          const idx = stepIndex(step.key, STEPS);
           const isDone = idx < currentIdx;
           const isActive = idx === currentIdx;
           return (

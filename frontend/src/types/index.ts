@@ -6,6 +6,7 @@ export type JobStep =
   | "queued"
   | "removing_background"
   | "estimating_depth"
+  | "refining_depth"
   | "generating_variants"
   | "done";
 

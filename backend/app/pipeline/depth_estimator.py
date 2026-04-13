@@ -80,6 +80,30 @@ def estimate_depth(
     return depth_arr
 
 
+def apply_sam_refinement(
+    job_id: str,
+    depth: np.ndarray,
+    image: Image.Image,
+) -> np.ndarray:
+    """Public entry point: SAM 2 per-region depth refinement.
+
+    Called by the worker as a separate step after estimate_depth() so the
+    job queue can emit a distinct progress update.  Re-saves raw_depth.npy
+    with the refined tensor so all downstream variant generation uses it.
+
+    Args:
+        job_id: Job identifier for storage paths.
+        depth:  Float32 depth array [0,1] from estimate_depth().
+        image:  Original source image (used to guide mask generation).
+    """
+    logger.info("Job %s: SAM 2 per-region refinement start", job_id)
+    refined = _apply_sam_refinement(depth, image)
+    npy_path = storage.raw_depth_path(job_id)
+    np.save(str(npy_path), refined)
+    logger.info("Job %s: refined depth saved", job_id)
+    return refined
+
+
 def load_raw_depth(job_id: str) -> np.ndarray:
     path = storage.raw_depth_path(job_id)
     if not path.exists():
@@ -138,11 +162,8 @@ def _marigold_depth(
 
     output = pipe(
         rgb_image,
-        num_inference_steps=4,   # LCM fast mode
-        ensemble_size=5,          # Average 5 runs → stable, low noise
-        processing_res=768,
-        match_input_res=False,
-        batch_size=1,
+        num_inference_steps=4,  # LCM fast mode
+        ensemble_size=5,        # Average 5 runs → stable, low noise
     )
 
     # prediction shape varies by diffusers version: (1,1,H,W) or (1,H,W) or (H,W).
@@ -243,6 +264,87 @@ def _blend_source_detail(
 
     enhanced = depth + strength * detail
     return np.clip(enhanced, 0.0, 1.0)
+
+
+def _apply_sam_refinement(depth: np.ndarray, image: Image.Image) -> np.ndarray:
+    """SAM 2 automatic mask generation → per-region smoothing + boundary sharpening.
+
+    Algorithm:
+      1. Generate region masks with SAM 2 (16×16 point grid, ~1-3s on GPU).
+      2. For each mask (largest first so foreground overrides background):
+           a. Replace region depth with a lightly Gaussian-smoothed version
+              (σ=2) — removes flat-fill noise while preserving broad gradients.
+           b. Accumulate a boundary ring (erode + XOR) into boundary_map.
+      3. Apply unsharp mask to the refined depth.
+      4. Blend sharpened depth at boundary_map locations — hard outlines in
+         illustration become crisp ridges in the depth map.
+    """
+    h, w = depth.shape
+
+    # Cap SAM input at 1024px on the long edge — SAM handles internal resizing
+    # but passing huge images slows point-grid inference unnecessarily.
+    sam_max = 1024
+    scale = min(1.0, sam_max / max(w, h))
+    sam_w, sam_h = max(1, int(w * scale)), max(1, int(h * scale))
+    image_np = np.array(
+        image.convert("RGB").resize((sam_w, sam_h), Image.LANCZOS)
+    )
+
+    generator = model_manager.get_sam2_mask_generator()
+    masks = generator.generate(image_np)
+
+    if not masks:
+        logger.warning("SAM 2 returned no masks; returning unmodified depth")
+        return depth
+
+    logger.debug("SAM 2: %d masks generated at %dx%d", len(masks), sam_w, sam_h)
+
+    refined = depth.copy()
+    boundary_map = np.zeros((h, w), dtype=np.float32)
+
+    # Light smooth: σ=2 kills pixel-level noise, keeps broad depth gradients
+    depth_smooth = cv2.GaussianBlur(depth, (0, 0), sigmaX=2.0)
+
+    # Largest masks first — small foreground elements override background smoothing
+    for mask_data in sorted(masks, key=lambda m: m["area"], reverse=True):
+        seg_small = mask_data["segmentation"]  # bool (sam_h, sam_w)
+        if seg_small.sum() < 100:
+            continue
+
+        # Scale mask back to depth resolution
+        if scale < 1.0:
+            seg = cv2.resize(
+                seg_small.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST
+            ).astype(bool)
+        else:
+            seg = seg_small
+
+        # Per-region smoothing
+        refined[seg] = depth_smooth[seg]
+
+        # Boundary ring — wider for larger regions
+        area = int(seg.sum())
+        radius = 4 if area > 10_000 else 2
+        k = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (radius * 2 + 1, radius * 2 + 1)
+        )
+        eroded = cv2.erode(seg.astype(np.uint8), k)
+        boundary_map = np.maximum(
+            boundary_map, (seg.astype(np.uint8) - eroded).astype(np.float32)
+        )
+
+    # Boundary sharpening — unsharp mask at region edges
+    sharpened = _unsharp_depth(refined, sigma=1.0, strength=2.5)
+    boundary_weight = cv2.GaussianBlur(boundary_map, (0, 0), sigmaX=1.5).clip(0.0, 1.0)
+    refined = (1.0 - boundary_weight) * refined + boundary_weight * sharpened
+
+    return np.clip(refined, 0.0, 1.0)
+
+
+def _unsharp_depth(depth: np.ndarray, sigma: float, strength: float) -> np.ndarray:
+    """Unsharp mask on a depth map — amplifies edges and transitions."""
+    blurred = cv2.GaussianBlur(depth, (0, 0), sigmaX=sigma)
+    return depth + strength * (depth - blurred)
 
 
 def _luminance_depth(image: Image.Image) -> np.ndarray:
