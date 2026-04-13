@@ -33,6 +33,8 @@ async def run_depth_job(
     image_bytes: bytes,
     mime_type: str,
     remove_background: bool,
+    image_type: str = "photo",
+    use_marigold: bool = False,
 ) -> None:
     loop = asyncio.get_event_loop()
     start = time.perf_counter()
@@ -62,7 +64,7 @@ async def run_depth_job(
     job_queue.update_job(job_id, step=JobStep.estimating_depth, progress=0.25)
     from app.pipeline.depth_estimator import estimate_depth
     raw_depth: np.ndarray = await loop.run_in_executor(
-        None, estimate_depth, job_id, image, use_luminance
+        None, estimate_depth, job_id, image, use_luminance, image_type, use_marigold
     )
     job_queue.update_job(job_id, progress=0.70)
 

@@ -16,10 +16,15 @@ router = APIRouter()
 _ALLOWED_MIME = {"image/jpeg", "image/png", "image/svg+xml", "image/webp"}
 
 
+_ALLOWED_IMAGE_TYPES = {"photo", "illustration"}
+
+
 @router.post("/upload", response_model=UploadResponse, status_code=202)
 async def upload_image(
     file: UploadFile = File(...),
     remove_background: bool = Form(default=False),
+    image_type: str = Form(default="photo"),
+    use_marigold: bool = Form(default=False),
 ):
     settings = get_settings()
 
@@ -29,6 +34,12 @@ async def upload_image(
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported file type: {content_type}. Accepted: JPEG, PNG, SVG, WebP.",
+        )
+
+    if image_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid image_type '{image_type}'. Must be 'photo' or 'illustration'.",
         )
 
     # Read + validate size
@@ -45,10 +56,13 @@ async def upload_image(
     _bytes = image_bytes
     _mime = content_type
     _rembg = remove_background
+    _image_type = image_type
+    _marigold = use_marigold
 
     async def coro_factory():
-        await run_depth_job(job_id, _bytes, _mime, _rembg)
+        await run_depth_job(job_id, _bytes, _mime, _rembg, _image_type, _marigold)
 
     await job_queue.enqueue(job_id, coro_factory)
 
-    return UploadResponse(job_id=job_id, status="queued", estimated_seconds=20)
+    estimated = 60 if use_marigold else 20
+    return UploadResponse(job_id=job_id, status="queued", estimated_seconds=estimated)

@@ -1,5 +1,7 @@
 export type JobStatus = "queued" | "running" | "complete" | "failed";
 
+export type ImageType = "photo" | "illustration";
+
 export type JobStep =
   | "queued"
   | "removing_background"

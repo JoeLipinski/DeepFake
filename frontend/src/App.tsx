@@ -13,12 +13,25 @@ import { cn } from "@/lib/utils";
 export default function App() {
   useJobPoller();
 
-  const { jobId, jobStatus, removeBackground, setRemoveBackground } = useAppStore(
+  const {
+    jobId,
+    jobStatus,
+    removeBackground,
+    setRemoveBackground,
+    imageType,
+    setImageType,
+    useMarigold,
+    setUseMarigold,
+  } = useAppStore(
     useShallow((s) => ({
       jobId: s.jobId,
       jobStatus: s.jobStatus,
       removeBackground: s.removeBackground,
       setRemoveBackground: s.setRemoveBackground,
+      imageType: s.imageType,
+      setImageType: s.setImageType,
+      useMarigold: s.useMarigold,
+      setUseMarigold: s.setUseMarigold,
     }))
   );
 
@@ -59,6 +72,32 @@ export default function App() {
               <>
                 <UploadZone />
 
+                {/* Image Type — segmented toggle */}
+                <div className="bg-forge-surface border border-forge-border rounded-xl px-4 py-3 space-y-2">
+                  <div>
+                    <p className="text-forge-text text-xs font-medium">Image Type</p>
+                    <p className="text-forge-subtle text-[10px] mt-0.5">
+                      Adjusts depth pipeline for your content
+                    </p>
+                  </div>
+                  <div className="flex gap-1 p-0.5 bg-forge-muted rounded-lg">
+                    {(["photo", "illustration"] as const).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => setImageType(type)}
+                        className={cn(
+                          "flex-1 py-1 rounded-md text-[11px] font-medium transition-colors",
+                          imageType === type
+                            ? "bg-forge-accent text-white"
+                            : "text-forge-subtle hover:text-forge-text"
+                        )}
+                      >
+                        {type === "photo" ? "Photo" : "Illustration / CGI"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Remove Background — configured BEFORE upload */}
                 <div className="bg-forge-surface border border-forge-border rounded-xl px-4 py-3 flex items-center justify-between">
                   <div>
@@ -78,6 +117,35 @@ export default function App() {
                       className={cn(
                         "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
                         removeBackground ? "translate-x-4" : "translate-x-0.5"
+                      )}
+                    />
+                  </button>
+                </div>
+
+                {/* Ultra Quality (Marigold) */}
+                <div className="bg-forge-surface border border-forge-border rounded-xl px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-forge-text text-xs font-medium">
+                      Ultra Quality
+                      <span className="ml-1.5 text-[9px] font-normal text-forge-accent border border-forge-accent rounded px-1 py-0.5 leading-none">
+                        ~45s
+                      </span>
+                    </p>
+                    <p className="text-forge-subtle text-[10px] mt-0.5">
+                      Marigold diffusion model — sharper boundaries &amp; tonal range
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setUseMarigold(!useMarigold)}
+                    className={cn(
+                      "relative w-9 h-5 rounded-full transition-colors",
+                      useMarigold ? "bg-forge-accent" : "bg-forge-muted"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
+                        useMarigold ? "translate-x-4" : "translate-x-0.5"
                       )}
                     />
                   </button>

@@ -5,6 +5,7 @@ import type {
   JobResult,
   VariantName,
   ProcessingParams,
+  ImageType,
 } from "@/types";
 import { DEFAULT_PARAMS } from "@/types";
 
@@ -12,6 +13,8 @@ interface AppState {
   // Upload state
   uploadedFile: File | null;
   removeBackground: boolean;
+  imageType: ImageType;
+  useMarigold: boolean;
 
   // Job state
   jobId: string | null;
@@ -32,6 +35,8 @@ interface AppState {
   // Actions
   setUploadedFile: (file: File | null) => void;
   setRemoveBackground: (v: boolean) => void;
+  setImageType: (v: ImageType) => void;
+  setUseMarigold: (v: boolean) => void;
   setJob: (jobId: string) => void;
   updateJobStatus: (
     status: JobStatus,
@@ -50,6 +55,8 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   uploadedFile: null,
   removeBackground: false,
+  imageType: "photo",
+  useMarigold: false,
   jobId: null,
   jobStatus: null,
   jobStep: null,
@@ -63,6 +70,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   setUploadedFile: (file) => set({ uploadedFile: file }),
   setRemoveBackground: (v) => set({ removeBackground: v }),
+  setImageType: (v) => set({ imageType: v }),
+  setUseMarigold: (v) => set({ useMarigold: v }),
   setJob: (jobId) =>
     set({
       jobId,
@@ -84,6 +93,8 @@ export const useAppStore = create<AppState>((set) => ({
   reset: () =>
     set({
       uploadedFile: null,
+      imageType: "photo",
+      useMarigold: false,
       jobId: null,
       jobStatus: null,
       jobStep: null,

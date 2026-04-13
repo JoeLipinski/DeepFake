@@ -13,8 +13,9 @@ torch>=2.3.0
 torchvision>=0.18.0
 numpy>=1.26.0
 
-# Depth estimation (Depth Anything V2)
+# Depth estimation (Depth Anything V2 + Marigold)
 transformers>=4.44.0
+diffusers>=0.29.0
 huggingface_hub>=0.24.0
 accelerate>=0.33.0
 

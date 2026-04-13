@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Module-level singletons
 _depth_pipe: Any = None
+_marigold_pipe: Any = None
 _rembg_session: Any = None
 _realesrgan_model: Any = None
 _device: str = "cpu"
@@ -35,6 +36,14 @@ def get_depth_pipe() -> Any:
     if _depth_pipe is None:
         raise RuntimeError("Depth model not loaded. Was load_all_models() called?")
     return _depth_pipe
+
+
+def get_marigold_pipe() -> Any:
+    """Lazy-load Marigold on first use — only downloaded when Ultra mode is requested."""
+    global _marigold_pipe
+    if _marigold_pipe is None:
+        _load_marigold()
+    return _marigold_pipe
 
 
 def get_rembg_session() -> Any:
@@ -81,6 +90,26 @@ def _load_depth_model(model_id: str) -> None:
         logger.info("Depth model loaded.")
     except Exception:
         logger.exception("Failed to load depth model")
+        raise
+
+
+def _load_marigold() -> None:
+    global _marigold_pipe, _loaded_models
+    logger.info("Lazy-loading Marigold LCM depth pipeline (first Ultra request)...")
+    try:
+        from diffusers import MarigoldDepthPipeline
+
+        dtype = torch.float16 if _device == "cuda" else torch.float32
+        variant = "fp16" if dtype == torch.float16 else None
+        _marigold_pipe = MarigoldDepthPipeline.from_pretrained(
+            "prs-eth/marigold-lcm-v1-0",
+            variant=variant,
+            torch_dtype=dtype,
+        ).to(_device)
+        _loaded_models.append("marigold_lcm")
+        logger.info("Marigold LCM loaded.")
+    except Exception:
+        logger.exception("Failed to load Marigold")
         raise
 
 

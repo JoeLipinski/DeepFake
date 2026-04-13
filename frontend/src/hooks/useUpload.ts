@@ -7,11 +7,13 @@ export function useUpload() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const { setUploadedFile, setJob, removeBackground } = useAppStore(
+  const { setUploadedFile, setJob, removeBackground, imageType, useMarigold } = useAppStore(
     useShallow((s) => ({
       setUploadedFile: s.setUploadedFile,
       setJob: s.setJob,
       removeBackground: s.removeBackground,
+      imageType: s.imageType,
+      useMarigold: s.useMarigold,
     }))
   );
 
@@ -22,7 +24,7 @@ export function useUpload() {
       setUploadedFile(file);
 
       try {
-        const resp = await uploadImage(file, removeBackground);
+        const resp = await uploadImage(file, removeBackground, imageType, useMarigold);
         setJob(resp.job_id);
       } catch (err: unknown) {
         const msg =
@@ -32,7 +34,7 @@ export function useUpload() {
         setIsUploading(false);
       }
     },
-    [removeBackground, setUploadedFile, setJob]
+    [removeBackground, imageType, useMarigold, setUploadedFile, setJob]
   );
 
   return { upload, isUploading, uploadError };
