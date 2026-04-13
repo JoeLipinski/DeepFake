@@ -56,20 +56,21 @@ async def reprocess(job_id: str, params: ReprocessParams):
 
     loop = asyncio.get_event_loop()
 
-    import numpy as np
     raw_depth = await loop.run_in_executor(
         None, depth_estimator.load_raw_depth, job_id
     )
 
+    # apply_custom_variant uses keyword-only args; wrap in lambda for run_in_executor
     processed = await loop.run_in_executor(
         None,
-        style_variants.apply_custom_variant,
-        raw_depth,
-        params.depth_intensity,
-        params.blur_radius,
-        params.contrast,
-        params.edge_enhancement,
-        params.invert,
+        lambda: style_variants.apply_custom_variant(
+            raw_depth,
+            depth_intensity=params.depth_intensity,
+            blur_radius=params.blur_radius,
+            contrast=params.contrast,
+            edge_enhancement=params.edge_enhancement,
+            invert=params.invert,
+        ),
     )
 
     variant_name = params.variant

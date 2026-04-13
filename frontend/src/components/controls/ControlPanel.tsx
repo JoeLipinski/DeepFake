@@ -57,15 +57,13 @@ function SliderRow({
 }
 
 export function ControlPanel() {
-  const { jobStatus, params, setParam, isReprocessing, removeBackground, setRemoveBackground } =
+  const { jobStatus, params, setParam, isReprocessing } =
     useAppStore(
       useShallow((s) => ({
         jobStatus: s.jobStatus,
         params: s.params,
         setParam: s.setParam,
         isReprocessing: s.isReprocessing,
-        removeBackground: s.removeBackground,
-        setRemoveBackground: s.setRemoveBackground,
       }))
     );
 
@@ -87,34 +85,6 @@ export function ControlPanel() {
       </div>
 
       <div className="p-4 space-y-5">
-        {/* Pre-processing toggle */}
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-forge-text text-xs font-medium">Remove Background</span>
-            <p className="text-forge-subtle text-[10px] mt-0.5">
-              Isolate subject before depth estimation
-            </p>
-          </div>
-          <button
-            onClick={() => setRemoveBackground(!removeBackground)}
-            disabled={!!jobStatus}
-            className={cn(
-              "relative w-9 h-5 rounded-full transition-colors",
-              removeBackground ? "bg-forge-accent" : "bg-forge-muted",
-              !!jobStatus && "opacity-40 cursor-not-allowed"
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
-                removeBackground ? "translate-x-4" : "translate-x-0.5"
-              )}
-            />
-          </button>
-        </div>
-
-        <div className="h-px bg-forge-border" />
-
         {/* Depth sliders */}
         <SliderRow
           label="Depth Intensity"

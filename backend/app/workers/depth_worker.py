@@ -56,10 +56,13 @@ async def run_depth_job(
         image = await loop.run_in_executor(None, do_rembg, image)
 
     # --- Step 3: Depth estimation ---
+    # SVGs are flat vector art — AI model produces near-uniform results.
+    # Use luminance-inversion depth for crisp engraving relief.
+    use_luminance = (mime_type == "image/svg+xml")
     job_queue.update_job(job_id, step=JobStep.estimating_depth, progress=0.25)
     from app.pipeline.depth_estimator import estimate_depth
     raw_depth: np.ndarray = await loop.run_in_executor(
-        None, estimate_depth, job_id, image
+        None, estimate_depth, job_id, image, use_luminance
     )
     job_queue.update_job(job_id, progress=0.70)
 

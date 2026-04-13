@@ -8,17 +8,22 @@ import { ProcessingStatus } from "@/components/processing/ProcessingStatus";
 import { ControlPanel } from "@/components/controls/ControlPanel";
 import { VariantGrid } from "@/components/variants/VariantGrid";
 import { ExportPanel } from "@/components/export/ExportPanel";
+import { cn } from "@/lib/utils";
 
 export default function App() {
   useJobPoller();
 
-  const { jobId, jobStatus } = useAppStore(
-    useShallow((s) => ({ jobId: s.jobId, jobStatus: s.jobStatus }))
+  const { jobId, jobStatus, removeBackground, setRemoveBackground } = useAppStore(
+    useShallow((s) => ({
+      jobId: s.jobId,
+      jobStatus: s.jobStatus,
+      removeBackground: s.removeBackground,
+      setRemoveBackground: s.setRemoveBackground,
+    }))
   );
 
   const hasJob = !!jobId;
-  const isProcessing =
-    jobStatus === "queued" || jobStatus === "running";
+  const isProcessing = jobStatus === "queued" || jobStatus === "running";
   const isComplete = jobStatus === "complete";
   const isFailed = jobStatus === "failed";
 
@@ -51,7 +56,33 @@ export default function App() {
           {/* ── LEFT COLUMN: Upload + Controls ── */}
           <div className="space-y-4">
             {!hasJob ? (
-              <UploadZone />
+              <>
+                <UploadZone />
+
+                {/* Remove Background — configured BEFORE upload */}
+                <div className="bg-forge-surface border border-forge-border rounded-xl px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-forge-text text-xs font-medium">Remove Background</p>
+                    <p className="text-forge-subtle text-[10px] mt-0.5">
+                      Isolate subject before depth estimation
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setRemoveBackground(!removeBackground)}
+                    className={cn(
+                      "relative w-9 h-5 rounded-full transition-colors",
+                      removeBackground ? "bg-forge-accent" : "bg-forge-muted"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
+                        removeBackground ? "translate-x-4" : "translate-x-0.5"
+                      )}
+                    />
+                  </button>
+                </div>
+              </>
             ) : (
               <>
                 <ImagePreview />
@@ -93,17 +124,10 @@ export default function App() {
             </div>
           )}
         </div>
-
-        {/* Upload zone below image preview on mobile when job exists */}
-        {!hasJob && (
-          <div className="lg:hidden mt-4 max-w-xl mx-auto">
-            {/* Already rendered above in left column on mobile */}
-          </div>
-        )}
       </main>
 
       <footer className="border-t border-forge-border py-4 text-center text-forge-subtle text-xs">
-        DepthForge · Depth Anything V2 Large · Real-ESRGAN · rembg
+        DepthForge · Depth Anything V2 Large · Lanczos 4× · rembg
       </footer>
     </div>
   );

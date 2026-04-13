@@ -87,13 +87,14 @@ async def _rerender(job_id, variant, loop, **params):
     )
     img = await loop.run_in_executor(
         None,
-        style_variants.apply_custom_variant,
-        raw_depth,
-        params["depth_intensity"],
-        params["blur_radius"],
-        params["contrast"],
-        params["edge_enhancement"],
-        params["invert"],
+        lambda: style_variants.apply_custom_variant(
+            raw_depth,
+            depth_intensity=params["depth_intensity"],
+            blur_radius=params["blur_radius"],
+            contrast=params["contrast"],
+            edge_enhancement=params["edge_enhancement"],
+            invert=params["invert"],
+        ),
     )
     return img
 
