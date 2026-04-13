@@ -64,3 +64,35 @@ export const DEFAULT_PARAMS: ProcessingParams = {
   edge_enhancement: 0.3,
   invert: false,
 };
+
+/** Preset params matching each backend style variant config. */
+export const VARIANT_PARAMS: Record<VariantName, ProcessingParams> = {
+  soft: {
+    depth_intensity: 0.75,
+    blur_radius: 2.5,
+    contrast: 0.9,
+    edge_enhancement: 0.0,
+    invert: false,
+  },
+  standard: {
+    depth_intensity: 1.0,
+    blur_radius: 1.0,
+    contrast: 1.1,
+    edge_enhancement: 0.3,
+    invert: false,
+  },
+  detailed: {
+    depth_intensity: 1.15,
+    blur_radius: 0.5,
+    contrast: 1.3,
+    edge_enhancement: 0.6,
+    invert: false,
+  },
+  sharp: {
+    depth_intensity: 1.3,
+    blur_radius: 0.0,
+    contrast: 1.5,
+    edge_enhancement: 1.0,
+    invert: false,
+  },
+};

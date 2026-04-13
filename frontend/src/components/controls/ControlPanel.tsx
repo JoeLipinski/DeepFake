@@ -146,15 +146,15 @@ export function ControlPanel() {
             onClick={() => setParam("invert", !params.invert)}
             disabled={disabled}
             className={cn(
-              "relative w-9 h-5 rounded-full transition-colors",
+              "relative w-11 h-6 rounded-full transition-colors",
               params.invert ? "bg-forge-accent" : "bg-forge-muted",
               disabled && "opacity-40 cursor-not-allowed"
             )}
           >
             <span
               className={cn(
-                "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
-                params.invert ? "translate-x-4" : "translate-x-0.5"
+                "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform",
+                params.invert ? "translate-x-5" : "translate-x-0"
               )}
             />
           </button>

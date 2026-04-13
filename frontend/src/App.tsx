@@ -109,14 +109,14 @@ export default function App() {
                   <button
                     onClick={() => setRemoveBackground(!removeBackground)}
                     className={cn(
-                      "relative w-9 h-5 rounded-full transition-colors",
+                      "relative w-11 h-6 rounded-full transition-colors",
                       removeBackground ? "bg-forge-accent" : "bg-forge-muted"
                     )}
                   >
                     <span
                       className={cn(
-                        "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
-                        removeBackground ? "translate-x-4" : "translate-x-0.5"
+                        "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform",
+                        removeBackground ? "translate-x-5" : "translate-x-0"
                       )}
                     />
                   </button>
@@ -138,14 +138,14 @@ export default function App() {
                   <button
                     onClick={() => setUseMarigold(!useMarigold)}
                     className={cn(
-                      "relative w-9 h-5 rounded-full transition-colors",
+                      "relative w-11 h-6 rounded-full transition-colors",
                       useMarigold ? "bg-forge-accent" : "bg-forge-muted"
                     )}
                   >
                     <span
                       className={cn(
-                        "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
-                        useMarigold ? "translate-x-4" : "translate-x-0.5"
+                        "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform",
+                        useMarigold ? "translate-x-5" : "translate-x-0"
                       )}
                     />
                   </button>

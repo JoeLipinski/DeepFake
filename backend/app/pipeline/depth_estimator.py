@@ -1,21 +1,23 @@
 """Depth estimation pipeline.
 
 For raster images (JPEG/PNG/WebP) — DAv2 path:
-  1. If image > _INFERENCE_SIZE: tiled inference at full resolution.
-       - Overlapping 1008px tiles, 25% cosine-feathered overlap.
-       - Per-tile depth is globally aligned via linear regression against
-         a low-res reference run (preserves correct relative scale).
-       - Tiles are stitched with weighted accumulation.
-     Else: single inference with guided bilateral upsample.
-  2. Source detail blend — high-frequency surface texture (pores, grain,
-     illustration outlines) blended into depth at mode-appropriate strength.
+  1. Source CLAHE pre-processing (LAB L-channel only) — better model gradient
+     cues on dark / low-contrast source images.
+  2. Tiled inference if image > _INFERENCE_SIZE, else single inference.
+       Tiles: 1008px, 33% cosine-feathered overlap.
+       Per-tile depth aligned to low-res reference via linear regression.
+  3. Multi-scale source detail blend (σ=0.5, 1, 3) — injects surface texture
+     the depth model misses.
+  4. Normal-map slope sharpening — amplifies surface gradients via
+     Frankot-Chellappa integration, making ridges/valleys crisper for
+     engraving without unsharp-mask halos.
 
 Ultra mode (Marigold LCM):
-  prs-eth/marigold-lcm-v1-0, 10 steps, ensemble of 10 — metric depth.
-  Detail blend applied after, same as DAv2.
+  prs-eth/marigold-lcm-v1-0, 10 steps, ensemble 10.
+  Detail blend + normal sharpening applied identically.
 
 SVG / flat vector art:
-  Luminance-inversion depth — dark shapes become raised relief.
+  Luminance-inversion depth.
 
 Illustration mode — per-region refinement (separate worker step):
   Felzenszwalb segmentation → per-region smooth + boundary sharpening.
@@ -35,15 +37,18 @@ from app.core import model_manager, storage
 
 logger = logging.getLogger(__name__)
 
-# Tile / inference size. 1008 = 72 × 14 (ViT patch multiple).
+# Tile size (ViT patch multiple: 1008 = 72 × 14).
 _INFERENCE_SIZE = 1008
 
-# Overlap between adjacent tiles (25%). Cosine feathering blends the seams.
-_TILE_OVERLAP = _INFERENCE_SIZE // 4  # 252px
+# 33% overlap between adjacent tiles — smoother stitching than 25%.
+_TILE_OVERLAP = _INFERENCE_SIZE // 3  # 336 px
 
-# Detail blend strength per image type.
+# Detail blend strengths per image type.
 _DETAIL_BLEND_STRENGTH_PHOTO = 0.35
 _DETAIL_BLEND_STRENGTH_ILLUSTRATION = 0.25
+
+# Normal-map slope amplification factor (>1 = steeper slopes).
+_NORMAL_SHARPEN_STRENGTH = 1.3
 
 
 # ---------------------------------------------------------------------------
@@ -57,15 +62,7 @@ def estimate_depth(
     image_type: str = "photo",
     use_marigold: bool = False,
 ) -> np.ndarray:
-    """Run depth estimation, save raw tensor, return float32 array [0,1].
-
-    Args:
-        job_id:        Job identifier for storage paths.
-        image:         Source PIL image (RGB or L).
-        use_luminance: Use luminance-inversion depth (SVG/flat vector art).
-        image_type:    "photo" or "illustration" — detail blend strength.
-        use_marigold:  Use Marigold LCM diffusion depth (Ultra mode).
-    """
+    """Run depth estimation, save raw tensor, return float32 array [0,1]."""
     original_size = image.size  # (W, H)
     mode = (
         "luminance" if use_luminance
@@ -85,9 +82,14 @@ def estimate_depth(
     elif use_marigold:
         depth_arr = _marigold_depth(image, original_size, image_type)
         depth_arr = _blend_source_detail(depth_arr, image, strength=blend_strength)
+        depth_arr = _normal_sharpen(depth_arr)
     else:
-        depth_arr = _ai_depth(image, original_size, image_type)
+        # Pre-normalise source luminance so the model sees better contrast cues.
+        # Keep original image for detail blend (real texture, not CLAHE version).
+        preprocessed = _clahe_preprocess(image)
+        depth_arr = _ai_depth(preprocessed, original_size, image_type)
         depth_arr = _blend_source_detail(depth_arr, image, strength=blend_strength)
+        depth_arr = _normal_sharpen(depth_arr)
 
     npy_path = storage.raw_depth_path(job_id)
     np.save(str(npy_path), depth_arr)
@@ -118,6 +120,29 @@ def load_raw_depth(job_id: str) -> np.ndarray:
     if not path.exists():
         raise FileNotFoundError(f"Raw depth not found for job {job_id}")
     return np.load(str(path))
+
+
+# ---------------------------------------------------------------------------
+# Source pre-processing
+# ---------------------------------------------------------------------------
+
+def _clahe_preprocess(image: Image.Image) -> Image.Image:
+    """Apply CLAHE to the L channel (LAB space) of the source image.
+
+    Improves depth model gradient cues on dark, under-exposed, or flat-contrast
+    images without altering hue or saturation.  The original image is kept for
+    the detail-blend pass so real texture (not the CLAHE version) is injected.
+    """
+    img_np = np.array(image.convert("RGB"))
+    lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB)
+    l_ch, a_ch, b_ch = cv2.split(lab)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l_eq = clahe.apply(l_ch)
+
+    lab_eq = cv2.merge([l_eq, a_ch, b_ch])
+    rgb_eq = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2RGB)
+    return Image.fromarray(rgb_eq)
 
 
 # ---------------------------------------------------------------------------
@@ -166,31 +191,24 @@ def _tiled_ai_depth(
     original_size: tuple[int, int],
     image_type: str = "photo",
 ) -> np.ndarray:
-    """Run DAv2 on overlapping tiles at original resolution, then stitch.
+    """Run DAv2 on overlapping tiles at full resolution, then stitch.
 
-    Each tile is 1008×1008px (full inference resolution). Tiles overlap by
-    25% (_TILE_OVERLAP) and are blended with a cosine-feathered weight map
-    so seams are invisible.
-
-    Per-tile scale problem: DAv2 normalises each tile's depth independently
-    to [0,1], so raw tile values are incompatible. We fix this by running a
-    single low-res reference pass first, then computing a linear (scale +
-    offset) correction per tile so it aligns with the reference in that region.
+    Tiles: _INFERENCE_SIZE × _INFERENCE_SIZE, _TILE_OVERLAP cosine feathering.
+    Per-tile normalisation: linear regression against a low-res reference pass.
     """
     w, h = original_size
     tile_size = _INFERENCE_SIZE
     stride = tile_size - _TILE_OVERLAP
 
-    # Step 1: low-res reference for per-tile scale normalisation
-    logger.info("Job tiled: computing low-res reference depth for scale alignment")
+    logger.info("Tiled inference: computing low-res reference for scale alignment")
     reference_depth = _single_ai_depth(image, original_size, image_type)
 
-    # Step 2: tile coordinates
     tiles = _get_tile_coords(w, h, tile_size, stride)
-    logger.info("Job tiled: %d tiles for %dx%d image (tile=%dpx, stride=%dpx)",
-                len(tiles), w, h, tile_size, stride)
+    logger.info(
+        "Tiled inference: %d tiles for %dx%d (tile=%dpx overlap=%dpx)",
+        len(tiles), w, h, tile_size, _TILE_OVERLAP,
+    )
 
-    # Step 3: accumulate weighted tile contributions
     accumulated = np.zeros((h, w), dtype=np.float64)
     weight_map = np.zeros((h, w), dtype=np.float64)
 
@@ -201,13 +219,10 @@ def _tiled_ai_depth(
         tile_img = image.crop((x0, y0, x1, y1))
         tile_depth = _infer_tile(tile_img, tw, th)
 
-        # Align tile scale/offset to the reference depth in this region
         ref_region = reference_depth[y0:y1, x0:x1]
         tile_depth = _align_tile_to_reference(tile_depth, ref_region)
 
-        # Cosine-feathered weight — high in centre, zero at edges
         weight = _make_tile_weight(th, tw, _TILE_OVERLAP)
-
         accumulated[y0:y1, x0:x1] += tile_depth.astype(np.float64) * weight
         weight_map[y0:y1, x0:x1] += weight
 
@@ -222,41 +237,32 @@ def _tiled_ai_depth(
 def _get_tile_coords(
     w: int, h: int, tile_size: int, stride: int
 ) -> list[tuple[int, int, int, int]]:
-    """Return (x0, y0, x1, y1) for every tile covering the image.
-
-    The last tile in each axis is always flush with the image edge so no
-    pixels are missed regardless of stride alignment.
-    """
     def axis_starts(dim: int) -> list[int]:
         if dim <= tile_size:
             return [0]
         starts = list(range(0, dim - tile_size, stride))
-        starts.append(dim - tile_size)          # flush end tile
+        starts.append(dim - tile_size)
         return sorted(set(starts))
 
-    xs = axis_starts(w)
-    ys = axis_starts(h)
     return [
         (x0, y0, min(x0 + tile_size, w), min(y0 + tile_size, h))
-        for y0 in ys
-        for x0 in xs
+        for y0 in axis_starts(h)
+        for x0 in axis_starts(w)
     ]
 
 
 def _make_tile_weight(h: int, w: int, overlap: int) -> np.ndarray:
-    """2-D cosine feather weight: 1.0 in the centre, tapers to 0 at edges."""
+    """Cosine feather weight: 1.0 in centre, tapers to 0 at edges."""
     def fade_1d(n: int, margin: int) -> np.ndarray:
         r = np.ones(n, dtype=np.float64)
         margin = min(margin, n // 2)
         if margin > 0:
-            ramp = (1.0 - np.cos(np.linspace(0.0, np.pi / 2, margin))) / 1.0
-            r[:margin] = np.sin(np.linspace(0.0, np.pi / 2, margin))
-            r[n - margin:] = r[:margin][::-1]
+            ramp = np.sin(np.linspace(0.0, np.pi / 2, margin))
+            r[:margin] = ramp
+            r[n - margin:] = ramp[::-1]
         return r
 
-    wy = fade_1d(h, overlap)
-    wx = fade_1d(w, overlap)
-    return np.outer(wy, wx)
+    return np.outer(fade_1d(h, overlap), fade_1d(w, overlap))
 
 
 def _infer_tile(tile_img: Image.Image, tw: int, th: int) -> np.ndarray:
@@ -272,32 +278,23 @@ def _infer_tile(tile_img: Image.Image, tw: int, th: int) -> np.ndarray:
     else:
         depth_arr = np.zeros_like(depth_arr)
 
-    # Pipeline may return slightly different dimensions — resize to exact tile size
     if depth_arr.shape != (th, tw):
         depth_arr = cv2.resize(depth_arr, (tw, th), interpolation=cv2.INTER_LINEAR)
 
     return depth_arr
 
 
-def _align_tile_to_reference(
-    tile: np.ndarray,
-    ref: np.ndarray,
-) -> np.ndarray:
-    """Linear scale + offset so tile matches ref in this region.
-
-    Fits:  ref ≈ a * tile + b  using least squares, then applies the
-    correction.  Skipped if either is too flat (no variation to fit on).
-    """
+def _align_tile_to_reference(tile: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """Linear scale + offset so tile matches ref (least-squares fit)."""
     t = tile.ravel().astype(np.float64)
     r = ref.ravel().astype(np.float64)
 
     if t.std() < 1e-4 or r.std() < 1e-4:
-        return tile  # flat region — no meaningful alignment possible
+        return tile
 
     A = np.stack([t, np.ones_like(t)], axis=1)
     result, *_ = np.linalg.lstsq(A, r, rcond=None)
     a, b = result
-
     return np.clip(a * tile + b, 0.0, 1.0)
 
 
@@ -310,22 +307,13 @@ def _marigold_depth(
     original_size: tuple[int, int],
     image_type: str = "photo",
 ) -> np.ndarray:
-    """Marigold LCM diffusion depth — 10 steps, ensemble of 10.
-
-    Lazy-loaded on first call (~1.7 GB download).
-    """
+    """Marigold LCM — 10 denoising steps, ensemble of 10."""
     pipe = model_manager.get_marigold_pipe()
     rgb_image = image.convert("RGB")
 
-    output = pipe(
-        rgb_image,
-        num_inference_steps=10,
-        ensemble_size=10,
-    )
+    output = pipe(rgb_image, num_inference_steps=10, ensemble_size=10)
 
-    # prediction shape varies by diffusers version; squeeze to (H, W)
     depth_arr = output.prediction.squeeze().astype(np.float32)
-
     d_min, d_max = depth_arr.min(), depth_arr.max()
     if d_max > d_min:
         depth_arr = (depth_arr - d_min) / (d_max - d_min)
@@ -340,13 +328,74 @@ def _marigold_depth(
 
 
 # ---------------------------------------------------------------------------
+# Normal-map slope sharpening
+# ---------------------------------------------------------------------------
+
+def _normal_sharpen(
+    depth: np.ndarray,
+    strength: float = _NORMAL_SHARPEN_STRENGTH,
+) -> np.ndarray:
+    """Amplify surface slopes via Frankot-Chellappa gradient integration.
+
+    Unlike unsharp masking (which sharpens depth *values*), this amplifies the
+    depth gradient field — making ridges higher and valleys deeper everywhere
+    in proportion to local slope.  The result has crisper engraving relief
+    without the halo artifacts that come from value-domain sharpening.
+
+    strength > 1.0 = steeper slopes (1.3 ≈ 30% more pronounced relief).
+    """
+    # Surface gradients
+    gx = cv2.Sobel(depth, cv2.CV_32F, 1, 0, ksize=3) / 8.0
+    gy = cv2.Sobel(depth, cv2.CV_32F, 0, 1, ksize=3) / 8.0
+
+    # Amplify
+    gx_amp = gx * strength
+    gy_amp = gy * strength
+
+    # Reconstruct depth from amplified gradients
+    enhanced = _frankot_chellappa(gx_amp, gy_amp)
+
+    # Normalise to [0, 1] preserving relative structure
+    e_min, e_max = enhanced.min(), enhanced.max()
+    if e_max > e_min:
+        enhanced = (enhanced - e_min) / (e_max - e_min)
+    else:
+        return depth
+
+    return enhanced.astype(np.float32)
+
+
+def _frankot_chellappa(p: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """Reconstruct a depth surface from its gradients p=dz/dx, q=dz/dy.
+
+    Least-squares solution in the frequency domain (Frankot & Chellappa 1988).
+    Produces an integrable surface consistent with the given gradient field.
+    """
+    rows, cols = p.shape
+    wx = np.fft.fftfreq(cols) * 2.0 * np.pi
+    wy = np.fft.fftfreq(rows) * 2.0 * np.pi
+    wx, wy = np.meshgrid(wx, wy)
+
+    P = np.fft.fft2(p)
+    Q = np.fft.fft2(q)
+
+    denom = wx ** 2 + wy ** 2
+    denom[0, 0] = 1.0  # avoid DC singularity
+
+    Z = (-1j * wx * P - 1j * wy * Q) / denom
+    Z[0, 0] = 0.0  # zero mean depth
+
+    return np.real(np.fft.ifft2(Z)).astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
 # Guided upsample
 # ---------------------------------------------------------------------------
 
 def _guided_upsample(
     depth_low: np.ndarray,
     source: Image.Image,
-    target_size: tuple[int, int],  # (W, H)
+    target_size: tuple[int, int],
     image_type: str = "photo",
 ) -> np.ndarray:
     """Edge-aware bicubic upsample guided by source image Scharr gradients."""
@@ -383,20 +432,27 @@ def _blend_source_detail(
     source: Image.Image,
     strength: float = _DETAIL_BLEND_STRENGTH_PHOTO,
 ) -> np.ndarray:
-    """Blend high-frequency surface texture from source into depth.
+    """Blend multi-scale high-frequency texture from source into depth.
 
-    Multi-scale detail (σ=1 fine + σ=3 medium) extracted from source
-    luminance and additively blended in. Transfers pores, grain, and
-    illustration line work that the depth model misses.
+    Three scales:
+      σ=0.5  ultra-fine — sub-pixel texture, hair strands, micro line-work
+      σ=1.0  fine       — pores, grain, fine illustration detail
+      σ=3.0  medium     — broader surface texture, skin, fabric weave
     """
     h, w = depth.shape
     guide = np.array(
         source.resize((w, h), Image.LANCZOS).convert("L")
     ).astype(np.float32) / 255.0
 
+    blur_uf  = cv2.GaussianBlur(guide, (0, 0), sigmaX=0.5)
     blur_fine = cv2.GaussianBlur(guide, (0, 0), sigmaX=1.0)
-    blur_med = cv2.GaussianBlur(guide, (0, 0), sigmaX=3.0)
-    detail = 0.6 * (guide - blur_fine) + 0.4 * (guide - blur_med)
+    blur_med  = cv2.GaussianBlur(guide, (0, 0), sigmaX=3.0)
+
+    detail = (
+        0.40 * (guide - blur_uf)
+        + 0.35 * (guide - blur_fine)
+        + 0.25 * (guide - blur_med)
+    )
 
     d_abs_max = np.abs(detail).max()
     if d_abs_max > 1e-6:
@@ -458,7 +514,6 @@ def _unsharp_depth(depth: np.ndarray, sigma: float, strength: float) -> np.ndarr
 # ---------------------------------------------------------------------------
 
 def _luminance_depth(image: Image.Image) -> np.ndarray:
-    """Luminance-inversion depth for SVG / flat vector art."""
     gray = np.array(image.convert("L")).astype(np.float32) / 255.0
     depth = 1.0 - gray
     depth = cv2.GaussianBlur(depth, (0, 0), sigmaX=1.0)

@@ -7,7 +7,7 @@ import type {
   ProcessingParams,
   ImageType,
 } from "@/types";
-import { DEFAULT_PARAMS } from "@/types";
+import { DEFAULT_PARAMS, VARIANT_PARAMS } from "@/types";
 
 interface AppState {
   // Upload state
@@ -85,7 +85,8 @@ export const useAppStore = create<AppState>((set) => ({
   updateJobStatus: (status, step, progress, error = null) =>
     set({ jobStatus: status, jobStep: step, jobProgress: progress, jobError: error }),
   setJobResult: (result) => set({ jobResult: result }),
-  setSelectedVariant: (v) => set({ selectedVariant: v, customPreviewUrl: null }),
+  setSelectedVariant: (v) =>
+    set({ selectedVariant: v, customPreviewUrl: null, params: { ...VARIANT_PARAMS[v] } }),
   setParam: (key, value) =>
     set((state) => ({ params: { ...state.params, [key]: value } })),
   setIsReprocessing: (v) => set({ isReprocessing: v }),
