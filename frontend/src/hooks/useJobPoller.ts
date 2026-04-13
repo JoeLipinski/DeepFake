@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { pollJobStatus, getJobResult } from "@/api/jobs";
 import { useAppStore } from "@/stores/appStore";
 
@@ -6,12 +7,12 @@ const POLL_INTERVALS = [500, 1000, 1500, 2000]; // ms; steady-state after index 
 
 export function useJobPoller() {
   const { jobId, jobStatus, updateJobStatus, setJobResult } = useAppStore(
-    (s) => ({
+    useShallow((s) => ({
       jobId: s.jobId,
       jobStatus: s.jobStatus,
       updateJobStatus: s.updateJobStatus,
       setJobResult: s.setJobResult,
-    })
+    }))
   );
 
   const attemptRef = useRef(0);

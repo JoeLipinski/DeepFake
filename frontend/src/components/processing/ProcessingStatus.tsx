@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/stores/appStore";
 import type { JobStep } from "@/types";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
@@ -19,12 +20,14 @@ function stepIndex(step: JobStep | null) {
 }
 
 export function ProcessingStatus() {
-  const { jobStatus, jobStep, jobProgress, jobError } = useAppStore((s) => ({
-    jobStatus: s.jobStatus,
-    jobStep: s.jobStep,
-    jobProgress: s.jobProgress,
-    jobError: s.jobError,
-  }));
+  const { jobStatus, jobStep, jobProgress, jobError } = useAppStore(
+    useShallow((s) => ({
+      jobStatus: s.jobStatus,
+      jobStep: s.jobStep,
+      jobProgress: s.jobProgress,
+      jobError: s.jobError,
+    }))
+  );
 
   if (!jobStatus || jobStatus === "complete") return null;
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Download, Maximize2, Loader2, Zap, Info } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/stores/appStore";
 import { buildExportUrl, downloadVariant } from "@/api/export";
 import { VARIANT_LABELS, VARIANT_DESCRIPTIONS } from "@/types";
@@ -7,13 +8,15 @@ import { cn } from "@/lib/utils";
 
 export function ExportPanel() {
   const { jobId, jobResult, jobStatus, selectedVariant, customPreviewUrl } =
-    useAppStore((s) => ({
-      jobId: s.jobId,
-      jobResult: s.jobResult,
-      jobStatus: s.jobStatus,
-      selectedVariant: s.selectedVariant,
-      customPreviewUrl: s.customPreviewUrl,
-    }));
+    useAppStore(
+      useShallow((s) => ({
+        jobId: s.jobId,
+        jobResult: s.jobResult,
+        jobStatus: s.jobStatus,
+        selectedVariant: s.selectedVariant,
+        customPreviewUrl: s.customPreviewUrl,
+      }))
+    );
 
   const [upscale, setUpscale] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);

@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { reprocessJob } from "@/api/jobs";
 import { useAppStore } from "@/stores/appStore";
 
@@ -10,14 +11,16 @@ export function useReprocess() {
     params,
     setIsReprocessing,
     setCustomPreviewUrl,
-  } = useAppStore((s) => ({
-    jobId: s.jobId,
-    jobStatus: s.jobStatus,
-    selectedVariant: s.selectedVariant,
-    params: s.params,
-    setIsReprocessing: s.setIsReprocessing,
-    setCustomPreviewUrl: s.setCustomPreviewUrl,
-  }));
+  } = useAppStore(
+    useShallow((s) => ({
+      jobId: s.jobId,
+      jobStatus: s.jobStatus,
+      selectedVariant: s.selectedVariant,
+      params: s.params,
+      setIsReprocessing: s.setIsReprocessing,
+      setCustomPreviewUrl: s.setCustomPreviewUrl,
+    }))
+  );
 
   const reprocess = useCallback(async () => {
     if (!jobId || jobStatus !== "complete") return;

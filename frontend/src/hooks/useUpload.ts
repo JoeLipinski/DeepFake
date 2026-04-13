@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { uploadImage } from "@/api/upload";
 import { useAppStore } from "@/stores/appStore";
 
@@ -6,11 +7,13 @@ export function useUpload() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const { setUploadedFile, setJob, removeBackground } = useAppStore((s) => ({
-    setUploadedFile: s.setUploadedFile,
-    setJob: s.setJob,
-    removeBackground: s.removeBackground,
-  }));
+  const { setUploadedFile, setJob, removeBackground } = useAppStore(
+    useShallow((s) => ({
+      setUploadedFile: s.setUploadedFile,
+      setJob: s.setJob,
+      removeBackground: s.removeBackground,
+    }))
+  );
 
   const upload = useCallback(
     async (file: File) => {

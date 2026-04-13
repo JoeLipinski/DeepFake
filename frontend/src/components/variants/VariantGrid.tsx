@@ -1,13 +1,16 @@
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/stores/appStore";
 import { VariantCard } from "./VariantCard";
 import type { VariantName } from "@/types";
 import { VARIANT_NAMES } from "@/types";
 
 export function VariantGrid() {
-  const { selectedVariant, setSelectedVariant } = useAppStore((s) => ({
-    selectedVariant: s.selectedVariant,
-    setSelectedVariant: s.setSelectedVariant,
-  }));
+  const { selectedVariant, setSelectedVariant } = useAppStore(
+    useShallow((s) => ({
+      selectedVariant: s.selectedVariant,
+      setSelectedVariant: s.setSelectedVariant,
+    }))
+  );
 
   return (
     <div className="space-y-3">

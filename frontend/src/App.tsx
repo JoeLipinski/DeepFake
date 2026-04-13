@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/stores/appStore";
 import { useJobPoller } from "@/hooks/useJobPoller";
 import { Header } from "@/components/layout/Header";
@@ -11,10 +12,9 @@ import { ExportPanel } from "@/components/export/ExportPanel";
 export default function App() {
   useJobPoller();
 
-  const { jobId, jobStatus } = useAppStore((s) => ({
-    jobId: s.jobId,
-    jobStatus: s.jobStatus,
-  }));
+  const { jobId, jobStatus } = useAppStore(
+    useShallow((s) => ({ jobId: s.jobId, jobStatus: s.jobStatus }))
+  );
 
   const hasJob = !!jobId;
   const isProcessing =

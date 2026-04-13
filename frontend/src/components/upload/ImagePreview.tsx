@@ -1,11 +1,11 @@
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/stores/appStore";
 import { X } from "lucide-react";
 
 export function ImagePreview() {
-  const { uploadedFile, reset } = useAppStore((s) => ({
-    uploadedFile: s.uploadedFile,
-    reset: s.reset,
-  }));
+  const { uploadedFile, reset } = useAppStore(
+    useShallow((s) => ({ uploadedFile: s.uploadedFile, reset: s.reset }))
+  );
 
   if (!uploadedFile) return null;
 

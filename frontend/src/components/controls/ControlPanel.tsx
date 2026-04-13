@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/stores/appStore";
 import { useReprocess } from "@/hooks/useReprocess";
 import { Loader2, RefreshCw, Sliders } from "lucide-react";
@@ -57,14 +58,16 @@ function SliderRow({
 
 export function ControlPanel() {
   const { jobStatus, params, setParam, isReprocessing, removeBackground, setRemoveBackground } =
-    useAppStore((s) => ({
-      jobStatus: s.jobStatus,
-      params: s.params,
-      setParam: s.setParam,
-      isReprocessing: s.isReprocessing,
-      removeBackground: s.removeBackground,
-      setRemoveBackground: s.setRemoveBackground,
-    }));
+    useAppStore(
+      useShallow((s) => ({
+        jobStatus: s.jobStatus,
+        params: s.params,
+        setParam: s.setParam,
+        isReprocessing: s.isReprocessing,
+        removeBackground: s.removeBackground,
+        setRemoveBackground: s.setRemoveBackground,
+      }))
+    );
 
   const { reprocess } = useReprocess();
 
