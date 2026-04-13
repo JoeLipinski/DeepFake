@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Download, Maximize2, Loader2, Zap, Info } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Download, Maximize2, Loader2, Zap, Info, ZoomIn, X } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/stores/appStore";
 import { buildExportUrl, downloadVariant } from "@/api/export";
@@ -20,6 +20,16 @@ export function ExportPanel() {
 
   const [upscale, setUpscale] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxOpen]);
 
   const isComplete = jobStatus === "complete";
 
@@ -45,9 +55,13 @@ export function ExportPanel() {
   };
 
   return (
+    <>
     <div className="bg-forge-surface border border-forge-border rounded-xl overflow-hidden space-y-0">
       {/* Large preview */}
-      <div className="aspect-square bg-forge-muted relative">
+      <div
+        className={cn("aspect-square bg-forge-muted relative group", previewUrl && "cursor-zoom-in")}
+        onClick={() => previewUrl && setLightboxOpen(true)}
+      >
         {previewUrl ? (
           <img
             src={previewUrl}
@@ -60,6 +74,13 @@ export function ExportPanel() {
             <p className="text-forge-subtle text-xs">
               Depth map preview will appear here after processing
             </p>
+          </div>
+        )}
+
+        {/* Zoom hint */}
+        {previewUrl && (
+          <div className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/60 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <ZoomIn className="w-3.5 h-3.5 text-white" />
           </div>
         )}
 
@@ -105,15 +126,15 @@ export function ExportPanel() {
             onClick={() => setUpscale(!upscale)}
             disabled={!isComplete}
             className={cn(
-              "relative w-9 h-5 rounded-full transition-colors",
+              "relative w-11 h-6 rounded-full transition-colors",
               upscale ? "bg-forge-accent" : "bg-forge-muted",
               !isComplete && "opacity-40 cursor-not-allowed"
             )}
           >
             <span
               className={cn(
-                "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
-                upscale ? "translate-x-4" : "translate-x-0.5"
+                "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform",
+                upscale ? "translate-x-5" : "translate-x-0"
               )}
             />
           </button>
@@ -158,5 +179,37 @@ export function ExportPanel() {
         )}
       </div>
     </div>
+
+    {/* Lightbox */}
+      {lightboxOpen && previewUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-6"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <div
+            className="relative flex flex-col items-center gap-3 max-w-[90vw] max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between">
+              <span className="text-white text-sm font-medium">
+                {VARIANT_LABELS[selectedVariant]}
+              </span>
+              <button
+                onClick={() => setLightboxOpen(false)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <img
+              src={previewUrl}
+              alt={`${VARIANT_LABELS[selectedVariant]} depth map`}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg"
+            />
+            <p className="text-white/40 text-xs">Click outside or press Esc to close</p>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -154,7 +154,7 @@ export default function App() {
             ) : (
               <>
                 <ImagePreview />
-                <ControlPanel />
+                {isComplete && <ControlPanel />}
               </>
             )}
           </div>
