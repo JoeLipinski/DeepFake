@@ -85,7 +85,7 @@ def apply_sam_refinement(
     depth: np.ndarray,
     image: Image.Image,
 ) -> np.ndarray:
-    """Public entry point: SAM 2 per-region depth refinement.
+    """Public entry point: per-region depth refinement (felzenszwalb segmentation).
 
     Called by the worker as a separate step after estimate_depth() so the
     job queue can emit a distinct progress update.  Re-saves raw_depth.npy
@@ -94,9 +94,9 @@ def apply_sam_refinement(
     Args:
         job_id: Job identifier for storage paths.
         depth:  Float32 depth array [0,1] from estimate_depth().
-        image:  Original source image (used to guide mask generation).
+        image:  Original source image (used to guide segmentation).
     """
-    logger.info("Job %s: SAM 2 per-region refinement start", job_id)
+    logger.info("Job %s: per-region refinement start", job_id)
     refined = _apply_sam_refinement(depth, image)
     npy_path = storage.raw_depth_path(job_id)
     np.save(str(npy_path), refined)
@@ -267,37 +267,34 @@ def _blend_source_detail(
 
 
 def _apply_sam_refinement(depth: np.ndarray, image: Image.Image) -> np.ndarray:
-    """SAM 2 automatic mask generation → per-region smoothing + boundary sharpening.
+    """Felzenszwalb graph-based segmentation → per-region smoothing + boundary sharpening.
+
+    Felzenszwalb segments along colour/intensity boundaries — exactly the hard
+    edges that illustrations, CGI, and AI art have between fills.  The result is
+    equivalent to SAM for static flat-colour content without requiring a GPU
+    model download.
 
     Algorithm:
-      1. Generate region masks with SAM 2 (16×16 point grid, ~1-3s on GPU).
-      2. For each mask (largest first so foreground overrides background):
-           a. Replace region depth with a lightly Gaussian-smoothed version
-              (σ=2) — removes flat-fill noise while preserving broad gradients.
-           b. Accumulate a boundary ring (erode + XOR) into boundary_map.
-      3. Apply unsharp mask to the refined depth.
-      4. Blend sharpened depth at boundary_map locations — hard outlines in
-         illustration become crisp ridges in the depth map.
+      1. Segment the source image into regions with felzenszwalb.
+      2. For each region: replace depth values with a lightly Gaussian-smoothed
+         version (σ=2) — kills flat-fill noise while keeping broad gradients.
+      3. Accumulate a boundary ring (erode + XOR) for every region edge.
+      4. Apply unsharp mask to the refined depth and blend it at boundaries —
+         illustration outlines become crisp ridges in the depth map.
     """
+    from skimage.segmentation import felzenszwalb
+
     h, w = depth.shape
 
-    # Cap SAM input at 1024px on the long edge — SAM handles internal resizing
-    # but passing huge images slows point-grid inference unnecessarily.
-    sam_max = 1024
-    scale = min(1.0, sam_max / max(w, h))
-    sam_w, sam_h = max(1, int(w * scale)), max(1, int(h * scale))
-    image_np = np.array(
-        image.convert("RGB").resize((sam_w, sam_h), Image.LANCZOS)
-    )
+    # Resize to depth map dimensions for pixel-accurate mask alignment
+    image_np = np.array(image.convert("RGB").resize((w, h), Image.LANCZOS))
 
-    generator = model_manager.get_sam2_mask_generator()
-    masks = generator.generate(image_np)
-
-    if not masks:
-        logger.warning("SAM 2 returned no masks; returning unmodified depth")
-        return depth
-
-    logger.debug("SAM 2: %d masks generated at %dx%d", len(masks), sam_w, sam_h)
+    # scale=150: merges small colour patches into broader regions (good for flat fills)
+    # sigma=0.8: light pre-blur handles anti-aliased edges without blurring hard lines
+    # min_size=200: ignore dust/noise regions smaller than ~200px
+    labels = felzenszwalb(image_np, scale=150, sigma=0.8, min_size=200)
+    n_regions = labels.max() + 1
+    logger.debug("Felzenszwalb: %d regions at %dx%d", n_regions, w, h)
 
     refined = depth.copy()
     boundary_map = np.zeros((h, w), dtype=np.float32)
@@ -305,25 +302,16 @@ def _apply_sam_refinement(depth: np.ndarray, image: Image.Image) -> np.ndarray:
     # Light smooth: σ=2 kills pixel-level noise, keeps broad depth gradients
     depth_smooth = cv2.GaussianBlur(depth, (0, 0), sigmaX=2.0)
 
-    # Largest masks first — small foreground elements override background smoothing
-    for mask_data in sorted(masks, key=lambda m: m["area"], reverse=True):
-        seg_small = mask_data["segmentation"]  # bool (sam_h, sam_w)
-        if seg_small.sum() < 100:
+    for label_id in range(n_regions):
+        seg = (labels == label_id)
+        area = int(seg.sum())
+        if area < 50:
             continue
-
-        # Scale mask back to depth resolution
-        if scale < 1.0:
-            seg = cv2.resize(
-                seg_small.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST
-            ).astype(bool)
-        else:
-            seg = seg_small
 
         # Per-region smoothing
         refined[seg] = depth_smooth[seg]
 
         # Boundary ring — wider for larger regions
-        area = int(seg.sum())
         radius = 4 if area > 10_000 else 2
         k = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE, (radius * 2 + 1, radius * 2 + 1)
@@ -333,7 +321,7 @@ def _apply_sam_refinement(depth: np.ndarray, image: Image.Image) -> np.ndarray:
             boundary_map, (seg.astype(np.uint8) - eroded).astype(np.float32)
         )
 
-    # Boundary sharpening — unsharp mask at region edges
+    # Boundary sharpening — unsharp mask blended at region edges
     sharpened = _unsharp_depth(refined, sigma=1.0, strength=2.5)
     boundary_weight = cv2.GaussianBlur(boundary_map, (0, 0), sigmaX=1.5).clip(0.0, 1.0)
     refined = (1.0 - boundary_weight) * refined + boundary_weight * sharpened

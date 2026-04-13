@@ -29,9 +29,9 @@ Pillow>=10.4.0
 rembg>=2.0.57
 onnxruntime>=1.18.0
 
-# Segmentation (SAM 2 — illustration mode per-region depth refinement)
-# Meta does not publish to PyPI; install directly from GitHub.
-sam2 @ git+https://github.com/facebookresearch/sam2.git
+# Segmentation (illustration mode per-region depth refinement)
+# Felzenszwalb graph-based segmentation — equivalent to SAM for static flat-color art.
+scikit-image>=0.22.0
 
 # HD upscaling: PIL Lanczos (basicsr/realesrgan incompatible with modern torchvision)
 # Real-ESRGAN can be re-added once basicsr publishes a torchvision-0.17+ compatible release.

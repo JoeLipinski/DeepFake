@@ -16,7 +16,7 @@ const STEPS_ILLUSTRATION: { key: JobStep; label: string }[] = [
   { key: "queued", label: "Queued" },
   { key: "removing_background", label: "Removing background" },
   { key: "estimating_depth", label: "Estimating depth" },
-  { key: "refining_depth", label: "Refining regions (SAM 2)" },
+  { key: "refining_depth", label: "Refining regions" },
   { key: "generating_variants", label: "Generating 4 variants" },
   { key: "done", label: "Complete" },
 ];

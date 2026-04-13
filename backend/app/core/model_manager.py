@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 # Module-level singletons
 _depth_pipe: Any = None
 _marigold_pipe: Any = None
-_sam2_mask_generator: Any = None
 _rembg_session: Any = None
 _realesrgan_model: Any = None
 _device: str = "cpu"
@@ -45,14 +44,6 @@ def get_marigold_pipe() -> Any:
     if _marigold_pipe is None:
         _load_marigold()
     return _marigold_pipe
-
-
-def get_sam2_mask_generator() -> Any:
-    """Lazy-load SAM 2 on first illustration-mode job."""
-    global _sam2_mask_generator
-    if _sam2_mask_generator is None:
-        _load_sam2()
-    return _sam2_mask_generator
 
 
 def get_rembg_session() -> Any:
@@ -99,32 +90,6 @@ def _load_depth_model(model_id: str) -> None:
         logger.info("Depth model loaded.")
     except Exception:
         logger.exception("Failed to load depth model")
-        raise
-
-
-def _load_sam2() -> None:
-    global _sam2_mask_generator, _loaded_models
-    logger.info("Lazy-loading SAM 2 Hiera Large (first illustration-mode job)...")
-    try:
-        from sam2.build_sam import build_sam2_hf
-        from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-
-        sam2_model = build_sam2_hf(
-            "facebook/sam2-hiera-large",
-            device=_device,
-            apply_postprocessing=False,
-        )
-        _sam2_mask_generator = SAM2AutomaticMaskGenerator(
-            sam2_model,
-            points_per_side=16,          # 256 prompts; enough for broad regions
-            pred_iou_thresh=0.7,
-            stability_score_thresh=0.85,
-            min_mask_region_area=200,    # ignore dust/noise regions
-        )
-        _loaded_models.append("sam2_hiera_large")
-        logger.info("SAM 2 loaded.")
-    except Exception:
-        logger.exception("Failed to load SAM 2")
         raise
 
 
